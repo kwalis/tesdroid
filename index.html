@@ -113,7 +113,10 @@
         timer = setTimeout(find, 4000);
         return;
       }
-      const target = `http://${addr.ip}:${addr.port || 8080}/?code=${encodeURIComponent(code)}`;
+      // Prefer HTTPS (trusted local-ip.sh name for the phone's address) when the phone offers it.
+      const tls = typeof addr.tlsHost === 'string' && /^\d{1,3}(-\d{1,3}){3}\.local-ip\.sh$/.test(addr.tlsHost);
+      const target = (tls ? `https://${addr.tlsHost}:${addr.tlsPort || 8443}` : `http://${addr.ip}:${addr.port || 8080}`)
+        + `/?code=${encodeURIComponent(code)}`;
       $('#why').textContent = 'Found it. Opening TesDroid Auto…';
       const go = $('#go');
       go.classList.remove('hidden');
