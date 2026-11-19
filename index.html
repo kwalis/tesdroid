@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TesDroid Auto</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 52 60'%3E%3Cpath fill='%23F2B33D' d='M26 0 52 15v30L26 60 0 45V15z'/%3E%3Cpath fill='%2314161B' d='M18.13 21.56h15.75v4.05h-5.85V39h-4.05V25.61h-5.85z'/%3E%3C/svg%3E">
+<style>
+  :root { --bg: #10141a; --card: #161a21; --line: #262b35; --input: #0f1217; --text: #eceef1; --muted: #8e949e; --gold: #f2b33d; --ink: #14161b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
+    font-family: Inter, "Segoe UI", Roboto, system-ui, sans-serif; }
+  body { display: grid; place-items: center; min-height: 100vh; padding: 16px; }
+  .card { width: min(30rem, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 2rem; padding: 2.4rem; text-align: center; }
+  .mark { width: 3.6rem; height: 4.15rem; margin: 0 auto 1.3rem; display: block; }
+  h1 { margin: 0 0 .5rem; font-size: 1.7rem; }
+  p { margin: 0 0 1.4rem; color: var(--muted); line-height: 1.5; }
+  label { display: block; text-align: left; font-size: .8rem; font-weight: 600; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin: 1rem 0 .5rem; }
+  input { width: 100%; height: 3.6rem; border-radius: 1rem; border: 1px solid #2d333e; background: var(--input); color: var(--text);
+    font: inherit; font-size: 1.5rem; text-align: center; letter-spacing: .15em; outline: none; text-transform: uppercase; }
+  input:focus { border-color: #3a414d; }
+  button { margin-top: 1.4rem; width: 100%; height: 3.6rem; border: 0; border-radius: 1rem; background: var(--gold); color: var(--ink);
+    font: inherit; font-weight: 600; font-size: 1.1rem; cursor: pointer; }
+  .link { background: none; color: var(--muted); height: auto; margin-top: 1.2rem; font-weight: 500; font-size: .95rem; }
+  .err { color: #f2777a; min-height: 1.4rem; margin-top: .9rem; }
+  .spinner { width: 2.2rem; height: 2.2rem; margin: .4rem auto 1.2rem; border: .22rem solid #232933; border-top-color: var(--gold); border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none; }
+  code { color: var(--text); }
+</style>
+</head>
+<body>
+<main class="card">
+  <svg class="mark" viewBox="0 0 52 60" aria-hidden="true"><path fill="#F2B33D" d="M26 0 52 15v30L26 60 0 45V15z"/><path fill="#14161B" d="M18.13 21.56h15.75v4.05h-5.85V39h-4.05V25.61h-5.85z"/></svg>
+
+  <section id="setup" class="hidden">
+    <h1>Connect to your phone</h1>
+    <p>Enter the Phone ID and pairing code from the <b>Easy address</b> card in the TesDroid Auto app. You only do this once.</p>
+    <form id="form">
+      <label for="pid">Phone ID</label>
+      <input id="pid" autocomplete="off" spellcheck="false" maxlength="11" placeholder="ABCDE-FGHJK">
+      <label for="code">Pairing code</label>
+      <input id="code" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="000000">
+      <button type="submit">Connect</button>
+      <div class="err" id="err"></div>
+    </form>
+  </section>
+
+  <section id="finding" class="hidden">
+    <h1>Finding your phone…</h1>
+    <div class="spinner"></div>
+    <p id="why">Looking up its current address.</p>
+    <button id="go" class="hidden">Open TesDroid Auto</button>
+    <button class="link" id="reset">Use a different phone</button>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const $ = s => document.querySelector(s);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+  const params = new URLSearchParams(location.search);
+  const dry = params.has('dry'); // testing: show where we'd go instead of going
+  const clean = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  // A Phone ID in the link (…/#ABCDE-FGHJK) pre-fills the form.
+  const fromHash = clean(location.hash.slice(1));
+  // A setup link (…/?id=ABCDE-FGHJK&code=123456) stores both and tidies the address bar.
+  if (clean(params.get('id')).length === 10 && /^\d{6}$/.test(params.get('code') || '')) {
+    store.set('tdRelayId', clean(params.get('id'))); store.set('tdRelayCode', params.get('code'));
+    params.delete('id'); params.delete('code');
+    try { history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '')); } catch (e) {}
+  }
+  let id = store.get('tdRelayId'), code = store.get('tdRelayCode');
+  if (fromHash.length === 10 && fromHash !== id) { id = null; }
+
+  function show(which) { ['setup', 'finding'].forEach(s => $('#' + s).classList.toggle('hidden', s !== which)); }
+
+  function setup(msg) {
+    show('setup');
+    $('#pid').value = fromHash.length === 10 ? fromHash.slice(0, 5) + '-' + fromHash.slice(5) : '';
+    $('#err').textContent = msg || '';
+    setTimeout(() => ($('#pid').value ? $('#code') : $('#pid')).focus(), 50);
+  }
+
+  $('#form').addEventListener('submit', e => {
+    e.preventDefault();
+    const pid = clean($('#pid').value), c = $('#code').value.replace(/\D/g, '');
+    if (pid.length !== 10) { $('#err').textContent = 'The Phone ID has 10 letters and numbers.'; return; }
+    if (c.length !== 6) { $('#err').textContent = 'The pairing code has 6 digits.'; return; }
+    store.set('tdRelayId', pid); store.set('tdRelayCode', c);
+    id = pid; code = c; find();
+  });
+  $('#reset').addEventListener('click', () => { store.del('tdRelayId'); store.del('tdRelayCode'); id = code = null; setup(); });
+
+  let timer = 0;
+  async function find() {
+    show('finding');
+    clearTimeout(timer);
+    try {
+      const r = await fetch(`https://ntfy.sh/tesdroid-${id.toLowerCase()}/json?poll=1&since=latest`, { cache: 'no-store' });
+      if (!r.ok) throw new Error('lookup ' + r.status);
+      const lines = (await r.text()).trim().split('\n').filter(Boolean);
+      const last = lines.length ? JSON.parse(lines[lines.length - 1]) : null;
+      const addr = last && last.message ? JSON.parse(last.message) : null;
+      if (!addr || !/^\d{1,3}(\.\d{1,3}){3}$/.test(addr.ip)) {
+        $('#why').innerHTML = 'Your phone hasn’t shared its address yet. On the phone, turn on <b>Easy address</b> and press <b>Start</b> in TesDroid Auto. Make sure the phone has mobile data.<br><br>Trying again…';
+        timer = setTimeout(find, 4000);
+        return;
+      }
+      const target = `http://${addr.ip}:${addr.port || 8080}/?code=${encodeURIComponent(code)}`;
+      $('#why').textContent = 'Found it. Opening TesDroid Auto…';
+      const go = $('#go');
+      go.classList.remove('hidden');
+      go.onclick = () => location.assign(target);
+      if (dry) { $('#why').textContent = 'Would open: ' + target; return; }
+      location.replace(target);
+    } catch (e) {
+      $('#why').textContent = 'Can’t reach the lookup service right now (the car needs internet). Trying again…';
+      timer = setTimeout(find, 4000);
+    }
+  }
+
+  if (id && code) find(); else setup();
+})();
+</script>
+</body>
+</html>
